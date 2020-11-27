@@ -1,0 +1,136 @@
+---
+title: 'Peer Graded Assignment: Prediction Assignment Writeup'
+author: "henrys kasereka"
+date: "11/27/2020"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+The goal of this project is to predict how they did the exercise. This is the "class" variable in the training set. You can use any of the other variables to predict with.
+
+## Background
+
+Using devices like Jawbone Up, Nike FuelBand, and Fitbit, it is now possible to collect a large amount of personal activity data at a relatively low price. These types of devices are part of the quantified self-movement - a group of enthusiasts who regularly take action on themselves to improve their health, to find role models in their behavior, or because they are tech geeks. One thing people do on a regular basis is quantify how much of a particular activity they do, but they rarely quantify how much they do. In this project, your goal will be to use data from the accelerometers on the waistband, forearm, arm, and dumbbell of 6 participants.
+
+## Pre-processing
+
+Packages needed to perform this project
+
+```{r}
+library(readr)
+library(e1071)
+library(caret)
+library(randomForest)
+library(gbm)
+```
+## Loading and processing
+
+```{r}
+train_link_data="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test_link_data="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(train_link_data,destfile="training_data.csv")
+download.file(test_link_data,destfile="testing_data.csv")
+training_data<-read.csv("training_data.csv",na.strings = c("NA", "#DIV/0!", ""))
+testing_data <- read.csv("testing_data.csv",na.strings = c("NA", "#DIV/0!", ""))
+# Data dimensions
+```
+
+```{r}
+dim(training_data)
+dim(training_data)
+```
+
+Removing columns that contains irrelevant variables and NA values 
+
+```{r}
+training_data<- training_data[, which(colSums(is.na(training_data)) == 0)] 
+testing_data <- testing_data[, which(colSums(is.na(testing_data)) == 0)]
+training_data <- training_data[,-c(1:7)] ##the first 7 columns are variables that has no relationship with "class"
+testing_data <- testing_data[,-c(1:7)]
+
+dim(training_data)
+dim(training_data)
+```
+Checking which column names are common among testing and training.
+
+```{r}
+length(intersect(colnames(training_data),colnames(testing_data)))
+```
+
+```{r }
+barplot(table(training_data$classe))
+```
+```{r }
+splom(classe~training_data[1:5], data = training_data)
+```
+52 variables in common, everyone except class, and the target variable is fairly uniform across different classes
+
+## Partioning the training set into training and cross validation datasets
+
+```{r }
+set.seed(123)
+training_data = data.frame(training_data)
+pTrain <- createDataPartition(training_data$classe, p=0.70, list=F)
+train <- training_data[pTrain, ]
+validation <- training_data[-pTrain, ]
+```
+
+## Fitting models
+
+### Random forest Modelling "rf"
+
+Unhappy, it takes a very long time for training, but it has a high accuracy.
+
+```{r}
+m_fit1 <- train(classe ~ ., method="rf", data=train, verbose = TRUE, trControl = trainControl(method="cv"), number = 3)
+p_val1 <- predict(m_fit1, validation)
+confusionMatrix(table(validation$classe, p_val1) )     
+```
+
+### Regression tree Modelling “rpart”
+
+```{r}
+m_fit2 <- train(classe ~ ., method="rpart", data=train)
+p_val2 <- predict(m_fit2, validation)
+confusionMatrix(table(validation$classe, p_val2) )    
+```
+### boosted trees Modelling “gbm”
+
+```{r}
+m_fit3 <- train(classe ~ ., method="gbm", data=train,trControl=trainControl(method = "repeatedcv", number = 5, repeats = 1),verbose=FALSE)
+p_val3 <- predict(m_fit3, validation)
+confusionMatrix(table(validation$classe, p_val3))
+```
+Comparing the three modeling used above, the result shows that the random forest model has the highest precision in cross-validation. Consequently, we will use the random forest model to predict the test samples.
+
+```{r}
+plot(m_fit1)
+par(new=TRUE)
+plot(m_fit2)
+par(new=TRUE)
+plot(m_fit3)
+```
+## Prediction
+
+According to the result obtained above, we choose to use a random forest model for the prediction
+
+```{r}
+testing_data <- testing_data[, colSums(is.na(testing_data)) == 0]
+testing_data <- testing_data[, -(1:5)]
+near_zvt <- nearZeroVar(testing_data)
+testing_data <- testing_data[, -near_zvt]
+```
+
+
+```{r}
+pred_f <- predict(m_fit1, data = testing_data)
+head(pred_f)
+```
+
